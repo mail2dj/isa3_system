@@ -20,6 +20,7 @@ class _VoiceTranslatorViewState extends State<VoiceTranslatorView> {
   String _wordsSpoken = "";
   String _translatedText = "";
   bool _isProcessing = false;
+  bool _isButtonPressed = false;
 
   final Map<String, TranslateLanguage> _languages = {
     '한국어': TranslateLanguage.korean,
@@ -39,7 +40,17 @@ class _VoiceTranslatorViewState extends State<VoiceTranslatorView> {
   }
 
   void _initSpeech() async {
-    _speechEnabled = await _speechToText.initialize();
+    _speechEnabled = await _speechToText.initialize(
+      onError: (val) {
+        debugPrint('음성 인식 에러: $val');
+        setState(() => _isButtonPressed = false);
+      },
+      onStatus: (status) {
+        debugPrint('음성 인식 상태: $status');
+        // UI 상태인 _isButtonPressed는 실제 물리적인 터치 업(onPointerUp)에서만 변경하도록 하여
+        // 엔진이 잠시 멈추더라도 버튼이 파란색으로 변하는 것을 방지합니다.
+      },
+    );
     setState(() {});
   }
 
@@ -50,20 +61,31 @@ class _VoiceTranslatorViewState extends State<VoiceTranslatorView> {
   }
 
   void _startListening() async {
-    await _speechToText.listen(onResult: (result) {
-      setState(() {
-        _wordsSpoken = result.recognizedWords;
-      });
-    });
-    setState(() {});
+    if (!_speechEnabled) return;
+    setState(() => _isButtonPressed = true);
+    try {
+      await _speechToText.listen(
+        onResult: (result) {
+          setState(() {
+            _wordsSpoken = result.recognizedWords;
+          });
+        },
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 10),
+        listenMode: ListenMode.dictation,
+        onDevice: true,
+        cancelOnError: false,
+      );
+    } catch (e) {
+      debugPrint('음성 인식 시작 에러: $e');
+      setState(() => _isButtonPressed = false);
+    }
   }
 
   void _stopListening() async {
+    setState(() => _isButtonPressed = false);
     await _speechToText.stop();
     setState(() {});
-    if (_wordsSpoken.isNotEmpty) {
-      _translate();
-    }
   }
 
   Future<void> _translate() async {
@@ -196,6 +218,34 @@ class _VoiceTranslatorViewState extends State<VoiceTranslatorView> {
                       ),
                       const SizedBox(height: 8),
                       SelectableText(_wordsSpoken.isEmpty ? "마이크 버튼을 누르고 말씀하세요" : _wordsSpoken, style: const TextStyle(fontSize: 18)),
+                      if (_wordsSpoken.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                icon: const Icon(Icons.translate),
+                                label: const Text("번역하기"),
+                                onPressed: _isProcessing ? null : _translate,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            IconButton(
+                              icon: const Icon(Icons.refresh, color: Colors.grey),
+                              onPressed: () {
+                                setState(() {
+                                  _wordsSpoken = "";
+                                  _translatedText = "";
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
                       const Divider(height: 40),
                       const Text("🌐 번역 결과:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
                       _isProcessing ? const Center(child: CircularProgressIndicator()) : SelectableText(_translatedText, style: const TextStyle(fontSize: 20, color: Colors.blue)),
@@ -225,10 +275,19 @@ class _VoiceTranslatorViewState extends State<VoiceTranslatorView> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _speechToText.isListening ? _stopListening : _startListening,
-        backgroundColor: _speechToText.isListening ? Colors.red : Colors.blue,
-        child: Icon(_speechToText.isListening ? Icons.mic : Icons.mic_none),
+      floatingActionButton: Listener(
+        onPointerDown: (_) => _startListening(),
+        onPointerUp: (_) => _stopListening(),
+        onPointerCancel: (_) => _stopListening(),
+        child: SizedBox(
+          width: 100,
+          height: 100,
+          child: FloatingActionButton(
+            onPressed: () {}, // Handled by Listener
+            backgroundColor: _isButtonPressed ? Colors.red : Colors.blue,
+            child: Icon(_isButtonPressed ? Icons.mic : Icons.mic_none, size: 44),
+          ),
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
