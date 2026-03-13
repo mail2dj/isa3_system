@@ -3,13 +3,20 @@ import 'package:camera/camera.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 class TextScannerView extends StatefulWidget {
   final List<CameraDescription> cameras;
+  final String selectedLanguage;
+  final Function(String)? onLanguageChanged;
   final VoidCallback? onHome;
-  const TextScannerView({super.key, required this.cameras, this.onHome});
+  const TextScannerView({
+    super.key,
+    required this.cameras,
+    this.selectedLanguage = '영어',
+    this.onLanguageChanged,
+    this.onHome,
+  });
 
   @override
   TextScannerViewState createState() => TextScannerViewState();
@@ -39,12 +46,13 @@ class TextScannerViewState extends State<TextScannerView> {
     '한국어': TextRecognitionScript.korean,
   };
 
-  String _selectedLanguage = '영어';
+  late String _selectedLanguage;
   late TextRecognizer _textRecognizer;
 
   @override
   void initState() {
     super.initState();
+    _selectedLanguage = widget.selectedLanguage;
     _initRecognizer();
     _initTts();
     _controller = CameraController(widget.cameras[0], ResolutionPreset.high);
@@ -55,8 +63,9 @@ class TextScannerViewState extends State<TextScannerView> {
   }
 
   void _initRecognizer() {
-    _textRecognizer =
-        TextRecognizer(script: _supportedLanguages[_selectedLanguage]!);
+    _textRecognizer = TextRecognizer(
+      script: _supportedLanguages[_selectedLanguage]!,
+    );
   }
 
   Future<void> _initTts() async {
@@ -69,15 +78,16 @@ class TextScannerViewState extends State<TextScannerView> {
       setState(() {
         _selectedLanguage = newValue;
       });
+      widget.onLanguageChanged?.call(newValue);
       _textRecognizer.close();
       _initRecognizer();
-      
-      // 이미 추출된 텍스트가 있으면 새 소스 언어 기준에 맞춰 재번역 트리거
-      bool isResultValid = _originalText != "종이를 비추고 스캔하기 버튼을 눌러주세요!" &&
+
+      bool isResultValid =
+          _originalText != "종이를 비추고 스캔하기 버튼을 눌러주세요!" &&
           _originalText != "인식 중..." &&
           _originalText != "글자를 찾지 못했습니다." &&
           !_originalText.startsWith("에러 발생:");
-      
+
       if (isResultValid) {
         _translate(_originalText);
       }
@@ -112,10 +122,9 @@ class TextScannerViewState extends State<TextScannerView> {
         sourceLang = TranslateLanguage.korean;
       }
 
-      // 소스 언어와 대상 언어가 같으면 번역 건너뛰기
       if (sourceLang == targetLang) {
         setState(() {
-          _translatedText = ""; // 같은 언어면 번역문 안 보여줌
+          _translatedText = "";
           _isProcessing = false;
         });
         return;
@@ -175,9 +184,7 @@ class TextScannerViewState extends State<TextScannerView> {
         _originalText = extractedText;
       });
 
-      // 스캔 직후 번역 수행
       await _translate(extractedText);
-
     } catch (e) {
       setState(() {
         _originalText = "에러 발생: $e";
@@ -190,20 +197,28 @@ class TextScannerViewState extends State<TextScannerView> {
   Future<void> _speak(String text, {bool isOriginal = false}) async {
     if (text.isEmpty) return;
 
-    String langCode = "ko-KR"; // 기본은 한국어 (번역 결과용)
-    
+    String langCode = "ko-KR";
+
     if (isOriginal) {
-      // 원본 텍스트를 읽을 때는 선택된 언어에 맞게 설정
-      if (_selectedLanguage == '영어') langCode = "en-US";
-      else if (_selectedLanguage == '일본어') langCode = "ja-JP";
-      else if (_selectedLanguage == '중국어') langCode = "zh-CN";
-      else if (_selectedLanguage == '한국어') langCode = "ko-KR";
+      if (_selectedLanguage == '영어') {
+        langCode = "en-US";
+      } else if (_selectedLanguage == '일본어') {
+        langCode = "ja-JP";
+      } else if (_selectedLanguage == '중국어') {
+        langCode = "zh-CN";
+      } else if (_selectedLanguage == '한국어') {
+        langCode = "ko-KR";
+      }
     } else {
-      // 번역 결과를 읽을 때 (대상 언어 코드 사용)
-      if (_targetLanguage == '한국어') langCode = "ko-KR";
-      else if (_targetLanguage == '영어') langCode = "en-US";
-      else if (_targetLanguage == '일본어') langCode = "ja-JP";
-      else if (_targetLanguage == '중국어') langCode = "zh-CN";
+      if (_targetLanguage == '한국어') {
+        langCode = "ko-KR";
+      } else if (_targetLanguage == '영어') {
+        langCode = "en-US";
+      } else if (_targetLanguage == '일본어') {
+        langCode = "ja-JP";
+      } else if (_targetLanguage == '중국어') {
+        langCode = "zh-CN";
+      }
     }
 
     await _flutterTts.setLanguage(langCode);
@@ -214,7 +229,10 @@ class TextScannerViewState extends State<TextScannerView> {
     Clipboard.setData(ClipboardData(text: text)).then((_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("클립보드에 복사되었습니다!"), duration: Duration(seconds: 2)),
+          const SnackBar(
+            content: Text("클립보드에 복사되었습니다!"),
+            duration: Duration(seconds: 2),
+          ),
         );
       }
     });
@@ -226,7 +244,8 @@ class TextScannerViewState extends State<TextScannerView> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    bool isResultValid = _originalText != "종이를 비추고 스캔하기 버튼을 눌러주세요!" &&
+    bool isResultValid =
+        _originalText != "종이를 비추고 스캔하기 버튼을 눌러주세요!" &&
         _originalText != "인식 중..." &&
         _originalText != "글자를 찾지 못했습니다." &&
         !_originalText.startsWith("에러 발생:");
@@ -234,16 +253,19 @@ class TextScannerViewState extends State<TextScannerView> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text("문자 번역 스캐너", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text(
+          "문자 번역 스캐너",
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+        ),
         backgroundColor: Colors.blueAccent,
         centerTitle: true,
         elevation: 0,
-        leading: widget.onHome != null 
-          ? IconButton(
-              icon: const Icon(Icons.home, color: Colors.white),
-              onPressed: widget.onHome,
-            )
-          : null,
+        leading: widget.onHome != null
+            ? IconButton(
+                icon: const Icon(Icons.home, color: Colors.white),
+                onPressed: widget.onHome,
+              )
+            : null,
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -252,9 +274,14 @@ class TextScannerViewState extends State<TextScannerView> {
                 value: _selectedLanguage,
                 dropdownColor: Colors.blueAccent,
                 icon: const Icon(Icons.language, color: Colors.white),
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
                 onChanged: _onLanguageChanged,
-                items: _supportedLanguages.keys.map<DropdownMenuItem<String>>((String value) {
+                items: _supportedLanguages.keys.map<DropdownMenuItem<String>>((
+                  String value,
+                ) {
                   return DropdownMenuItem<String>(
                     value: value,
                     child: Text(value),
@@ -275,7 +302,13 @@ class TextScannerViewState extends State<TextScannerView> {
               decoration: BoxDecoration(
                 color: Colors.black,
                 borderRadius: BorderRadius.circular(24),
-                boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 4))],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(24),
@@ -293,27 +326,45 @@ class TextScannerViewState extends State<TextScannerView> {
                   children: [
                     if (isResultValid) ...[
                       const SizedBox(height: 16),
-                      _buildResultCard("📄 추출된 원어 ($_selectedLanguage)", _originalText, Colors.blueAccent, isOriginal: true),
+                      _buildResultCard(
+                        "📄 추출된 원어 ($_selectedLanguage)",
+                        _originalText,
+                        Colors.blueAccent,
+                        isOriginal: true,
+                      ),
                       const SizedBox(height: 16),
-                      // 대상 언어 선택바
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.05),
+                          color: Colors.green.withValues(alpha: 0.05),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.green.withOpacity(0.2)),
+                          border: Border.all(
+                            color: Colors.green.withValues(alpha: 0.2),
+                          ),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text("번역할 대상 언어 선택:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                            const Text(
+                              "번역할 대상 언어 선택:",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green,
+                              ),
+                            ),
                             Row(
                               children: [
                                 DropdownButton<String>(
                                   value: _targetLanguage,
                                   dropdownColor: Colors.white,
                                   underline: const SizedBox(),
-                                  style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                                  style: const TextStyle(
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                   onChanged: (String? newValue) {
                                     if (newValue != null) {
                                       setState(() {
@@ -322,15 +373,22 @@ class TextScannerViewState extends State<TextScannerView> {
                                       _translate(_originalText);
                                     }
                                   },
-                                  items: _translateLanguages.keys.map<DropdownMenuItem<String>>((String value) {
-                                    return DropdownMenuItem<String>(
-                                      value: value,
-                                      child: Text(value),
-                                    );
-                                  }).toList(),
+                                  items: _translateLanguages.keys
+                                      .map<DropdownMenuItem<String>>((
+                                        String value,
+                                      ) {
+                                        return DropdownMenuItem<String>(
+                                          value: value,
+                                          child: Text(value),
+                                        );
+                                      })
+                                      .toList(),
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.translate, color: Colors.green),
+                                  icon: const Icon(
+                                    Icons.translate,
+                                    color: Colors.green,
+                                  ),
                                   onPressed: () => _translate(_originalText),
                                   tooltip: "지금 번역하기",
                                 ),
@@ -340,15 +398,24 @@ class TextScannerViewState extends State<TextScannerView> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      if (_translatedText.isNotEmpty) 
-                        _buildResultCard("🌐 번역 결과 ($_targetLanguage)", _translatedText, Colors.green, isOriginal: false),
+                      if (_translatedText.isNotEmpty)
+                        _buildResultCard(
+                          "🌐 번역 결과 ($_targetLanguage)",
+                          _translatedText,
+                          Colors.green,
+                          isOriginal: false,
+                        ),
                       const SizedBox(height: 24),
                     ] else ...[
                       const SizedBox(height: 40),
                       Icon(Icons.camera_alt, size: 60, color: Colors.grey[300]),
                       const SizedBox(height: 16),
-                      Text(_originalText, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[600], fontSize: 16)),
-                    ]
+                      Text(
+                        _originalText,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -364,9 +431,19 @@ class TextScannerViewState extends State<TextScannerView> {
           onPressed: _isProcessing ? null : _takeAndScan,
           backgroundColor: _isProcessing ? Colors.grey : Colors.blueAccent,
           icon: _isProcessing
-              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
               : const Icon(Icons.document_scanner),
-          label: Text(_isProcessing ? "처리 중..." : "문자 스캔하기", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          label: Text(
+            _isProcessing ? "처리 중..." : "문자 스캔하기",
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           elevation: 6,
         ),
       ),
@@ -374,14 +451,25 @@ class TextScannerViewState extends State<TextScannerView> {
     );
   }
 
-  Widget _buildResultCard(String title, String content, Color titleColor, {required bool isOriginal}) {
+  Widget _buildResultCard(
+    String title,
+    String content,
+    Color titleColor, {
+    required bool isOriginal,
+  }) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: titleColor.withOpacity(0.3), width: 1),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        border: Border.all(color: titleColor.withValues(alpha: 0.3), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -389,31 +477,54 @@ class TextScannerViewState extends State<TextScannerView> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: titleColor.withOpacity(0.1),
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+              color: titleColor.withValues(alpha: 0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: titleColor, fontSize: 16)),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: titleColor,
+                    fontSize: 16,
+                  ),
+                ),
                 Row(
                   children: [
                     IconButton(
-                      icon: Icon(Icons.volume_up, size: 22, color: titleColor), 
+                      icon: Icon(Icons.volume_up, size: 22, color: titleColor),
                       onPressed: () => _speak(content, isOriginal: isOriginal),
+                      tooltip: "읽어주기",
                     ),
                     IconButton(
-                      icon: const Icon(Icons.copy, size: 22, color: Colors.grey), 
+                      icon: const Icon(
+                        Icons.copy,
+                        size: 22,
+                        color: Colors.grey,
+                      ),
                       onPressed: () => _copyToClipboard(content),
+                      tooltip: "복사하기",
                     ),
                   ],
-                )
+                ),
               ],
             ),
           ),
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: SelectableText(content, style: const TextStyle(fontSize: 16, height: 1.5, color: Colors.black87)),
+            child: SelectableText(
+              content,
+              style: const TextStyle(
+                fontSize: 16,
+                height: 1.5,
+                color: Colors.black87,
+              ),
+            ),
           ),
         ],
       ),

@@ -39,25 +39,39 @@ class MainScreens extends StatefulWidget {
 
 class _MainScreensState extends State<MainScreens> {
   int _currentIndex = 0;
-  
+  String _selectedLanguage = '한국어';
+
   @override
   Widget build(BuildContext context) {
     Widget currentScreen;
     switch (_currentIndex) {
       case 0:
-        currentScreen = DocScannerView(onHome: () => setState(() => _currentIndex = 0));
-        break;
-      case 1:
         currentScreen = TextScannerView(
           cameras: widget.cameras,
-          onHome: () => setState(() => _currentIndex = 0),
+          selectedLanguage: _selectedLanguage,
+          onLanguageChanged: (language) =>
+              setState(() => _selectedLanguage = language),
+          onHome: () => setState(() => _currentIndex = 1),
+        );
+        break;
+      case 1:
+        currentScreen = DocScannerView(
+          selectedLanguage: _selectedLanguage,
+          onLanguageChanged: (language) =>
+              setState(() => _selectedLanguage = language),
+          onHome: () => setState(() => _currentIndex = 1),
         );
         break;
       case 2:
         currentScreen = const VoiceTranslatorView();
         break;
       case 3:
-        currentScreen = FileTranslatorView(onHome: () => setState(() => _currentIndex = 0));
+        currentScreen = FileTranslatorView(
+          selectedLanguage: _selectedLanguage,
+          onLanguageChanged: (language) =>
+              setState(() => _selectedLanguage = language),
+          onHome: () => setState(() => _currentIndex = 1),
+        );
         break;
       default:
         currentScreen = const VoiceTranslatorView();
@@ -72,10 +86,16 @@ class _MainScreensState extends State<MainScreens> {
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.document_scanner), label: '문서 원본'),
           BottomNavigationBarItem(icon: Icon(Icons.translate), label: '번역'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.document_scanner),
+            label: '문서 원본',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.mic), label: '음성 통역'),
-          BottomNavigationBarItem(icon: Icon(Icons.description), label: '파일 번역'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.description),
+            label: '파일 번역',
+          ),
         ],
       ),
     );
